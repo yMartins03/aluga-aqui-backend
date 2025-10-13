@@ -1,0 +1,145 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgres"
+  url      = env("DATABASE_URL")
+}
+
+// --- Modelos para um sistema de aluguéis imobiliários ---
+
+model Proprietario {
+  id         String   @db.VarChar(36) @id @default(uuid())
+  nome       String   @db.VarChar(60)
+  email      String   @db.VarChar(40)
+  senha      String   @db.VarChar(60)   // senha deve ser varchar(60)
+  telefone   String?  @db.VarChar(20)
+  cidade     String?  @db.VarChar(30)
+  imoveis    Imovel[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@map("proprietarios")
+}
+
+model Cliente {
+  id         String    @db.VarChar(36) @id @default(uuid())
+  nome       String    @db.VarChar(60)
+  email      String    @db.VarChar(40)
+  senha      String    @db.VarChar(60)   // senha deve ser varchar(60)
+  telefone   String?   @db.VarChar(20)
+  cidade     String?   @db.VarChar(30)
+  propostas  Proposta[]
+  locacoes   Locacao[]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  @@map("clientes")
+}
+
+model Imovel {
+  id            Int        @id @default(autoincrement())
+  titulo        String     @db.VarChar(100)
+  descricao     String?    @db.Text
+  endereco      String     @db.VarChar(255)
+  cidade        String     @db.VarChar(60)
+  bairro        String?    @db.VarChar(60)
+  cep           String?    @db.VarChar(15)    
+  tipo          TipoImovel // enum com tipos predefinidos
+  aluguelMensal Decimal    @db.Decimal(10,2)
+  disponivel    Boolean    @default(true)
+  fotos         String?    @db.Text // pode armazenar JSON com URLs
+  proprietario  Proprietario    @relation(fields: [proprietarioId], references: [id])
+  proprietarioId String     @db.VarChar(36)
+  propostas     Proposta[]
+  locacoes      Locacao[]
+  admin         Admin?     @relation(fields: [adminId], references: [id])
+  adminId       String?    @db.VarChar(36)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  @@map("imoveis")
+}
+
+model Locacao {
+  id            Int       @id @default(autoincrement())
+  imovel        Imovel    @relation(fields: [imovelId], references: [id])
+  imovelId      Int
+  cliente      Cliente   @relation(fields: [clienteId], references: [id])
+  clienteId     String    @db.VarChar(36)
+  dataInicio    DateTime
+  dataFim       DateTime
+  valorMensal   Decimal   @db.Decimal(10,2)
+  valorTotal    Decimal?  @db.Decimal(12,2)
+  deposit       Decimal?  @db.Decimal(10,2)
+  status        LocacaoStatus @default(ATIVO)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  @@map("locacoes")
+}
+
+model Proposta {
+  id          Int        @id @default(autoincrement())
+  cliente     Cliente    @relation(fields: [clienteId], references: [id])
+  clienteId   String     @db.VarChar(36)
+  imovel      Imovel     @relation(fields: [imovelId], references: [id])
+  imovelId    Int
+  descricao   String     @db.VarChar(500)
+  resposta    String?    @db.VarChar(500)
+  admin       Admin?     @relation(fields: [adminId], references: [id])
+  adminId     String?    @db.VarChar(36)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  @@map("propostas")
+}
+
+model Admin {
+  id            String   @db.VarChar(36) @id @default(uuid())
+  nome          String   @db.VarChar(60)
+  email         String   @db.VarChar(40)
+  senha         String   @db.VarChar(60)   // senha deve ser varchar(60)
+  nivel         Int      @db.SmallInt @default(2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt  
+  imoveis       Imovel[]
+  propostas     Proposta[]
+  logs          Log[]
+  @@map("admins")
+}
+
+model Log {
+  id            Int         @id @default(autoincrement())
+  admin         Admin       @relation(fields: [adminId], references: [id])
+  adminId       String      @db.VarChar(36)
+  descricao     String      @db.VarChar(120)
+  complemento   String?     @db.VarChar(400)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  @@map("logs")
+}
+
+enum LocacaoStatus {
+  PENDENTE
+  ATIVO
+  ENCERRADO
+  CANCELADO
+}
+
+enum TipoImovel {
+  CASA
+  APARTAMENTO
+  KITNET
+  STUDIO
+  COBERTURA
+  SOBRADO
+  COMERCIAL
+  SALA_COMERCIAL
+  LOJA
+  GALPAO
+  TERRENO
+  CHACARA
+}

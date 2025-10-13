@@ -15,7 +15,20 @@ const app = express()
 const port = 3000
 
 app.use(express.json())
-app.use(cors())
+app.use(cors({
+  origin: [
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'https://aluga-aqui-front.vercel.app'
+  ],
+  credentials: true
+}))
+
+// Log para debug
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.path} - Origin: ${req.headers.origin}`)
+  next()
+})
 
 app.use("/imoveis", routesImoveis)
 app.use("/clientes/login", routesLogin)

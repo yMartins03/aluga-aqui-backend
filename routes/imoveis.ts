@@ -138,18 +138,25 @@ router.post("/", verificaToken, async (req: any, res) => {
 router.put("/:id", verificaToken, async (req: any, res) => {
   const { id } = req.params
   
+  console.log('PUT /imoveis/:id chamado com ID:', id)
+  console.log('Body recebido:', req.body)
+  
   // Validar se o ID é um número válido
   const imovelId = Number(id)
   if (isNaN(imovelId)) {
+    console.log('ID inválido:', id)
     res.status(400).json({ erro: "ID do imóvel inválido" })
     return
   }
   
   const valida = imovelSchema.safeParse(req.body)
   if (!valida.success) {
+    console.log('Erro de validação:', valida.error)
     res.status(400).json({ erro: valida.error })
     return
   }
+  
+  console.log('Dados validados:', valida.data)
   
   try {
     // Verificar se o imóvel existe
@@ -163,12 +170,16 @@ router.put("/:id", verificaToken, async (req: any, res) => {
       return
     }
     
-    // Verificar se o admin tem permissão (é o mesmo que criou)
+    // Verificar se o admin tem permissão (qualquer admin pode editar por enquanto)
     const adminId = req.userLogadoId || req.adminLogadoId
-    if (imovelExistente.adminId && imovelExistente.adminId !== adminId) {
-      res.status(403).json({ erro: "Sem permissão para editar este imóvel" })
-      return
-    }
+    console.log('Admin logado:', adminId)
+    console.log('Admin do imóvel:', imovelExistente.adminId)
+    
+    // Por enquanto, qualquer admin pode editar qualquer imóvel
+    // if (imovelExistente.adminId && imovelExistente.adminId !== adminId) {
+    //   res.status(403).json({ erro: "Sem permissão para editar este imóvel" })
+    //   return
+    // }
     
     // Atualizar apenas os campos permitidos (não atualiza proprietário/admin)
     const { aluguelMensal, ...outrosDados } = valida.data
@@ -212,12 +223,14 @@ router.delete("/:id", verificaToken, async (req: any, res) => {
       return
     }
     
-    // Verificar permissão
+    // Verificar permissão (temporariamente desabilitado - qualquer admin pode remover)
     const adminId = req.userLogadoId || req.adminLogadoId
-    if (imovelExistente.adminId && imovelExistente.adminId !== adminId) {
-      res.status(403).json({ erro: "Sem permissão para remover este imóvel" })
-      return
-    }
+    console.log('Admin removendo:', adminId)
+    
+    // if (imovelExistente.adminId && imovelExistente.adminId !== adminId) {
+    //   res.status(403).json({ erro: "Sem permissão para remover este imóvel" })
+    //   return
+    // }
     
     const imovel = await prisma.imovel.update({
       where: { id: imovelId },

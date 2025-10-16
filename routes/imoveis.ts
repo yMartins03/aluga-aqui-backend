@@ -135,39 +135,113 @@ router.post("/", verificaToken, async (req: any, res) => {
   }
 })
 
-router.put("/:id", verificaToken, async (req, res) => {
+router.put("/:id", verificaToken, async (req: any, res) => {
   const { id } = req.params
+  
+  // Validar se o ID é um número válido
+  const imovelId = Number(id)
+  if (isNaN(imovelId)) {
+    res.status(400).json({ erro: "ID do imóvel inválido" })
+    return
+  }
+  
   const valida = imovelSchema.safeParse(req.body)
   if (!valida.success) {
     res.status(400).json({ erro: valida.error })
     return
   }
+  
   try {
-    const imovel = await prisma.imovel.update({
-      where: { id: Number(id) },
-      data: valida.data
+    // Verificar se o imóvel existe
+    const imovelExistente = await prisma.imovel.findUnique({
+      where: { id: imovelId },
+      include: { admin: true }
     })
+    
+    if (!imovelExistente) {
+      res.status(404).json({ erro: "Imóvel não encontrado" })
+      return
+    }
+    
+    // Verificar se o admin tem permissão (é o mesmo que criou)
+    const adminId = req.userLogadoId || req.adminLogadoId
+    if (imovelExistente.adminId && imovelExistente.adminId !== adminId) {
+      res.status(403).json({ erro: "Sem permissão para editar este imóvel" })
+      return
+    }
+    
+    // Atualizar apenas os campos permitidos (não atualiza proprietário/admin)
+    const { aluguelMensal, ...outrosDados } = valida.data
+    
+    const imovel = await prisma.imovel.update({
+      where: { id: imovelId },
+      data: {
+        ...outrosDados,
+        aluguelMensal: typeof aluguelMensal === 'string' ? parseFloat(aluguelMensal) : aluguelMensal
+      },
+      include: { proprietario: true }
+    })
+    
     res.status(200).json(imovel)
   } catch (error) {
-    res.status(400).json({ error })
+    console.error('Erro ao atualizar imóvel:', error)
+    res.status(400).json({ 
+      erro: error instanceof Error ? error.message : String(error),
+      detalhes: error instanceof Error ? error.stack : 'Sem stack trace'
+    })
   }
 })
 
-router.delete("/:id", verificaToken, async (req, res) => {
+router.delete("/:id", verificaToken, async (req: any, res) => {
   const { id } = req.params
+  
+  const imovelId = Number(id)
+  if (isNaN(imovelId)) {
+    res.status(400).json({ erro: "ID do imóvel inválido" })
+    return
+  }
+  
   try {
+    // Verificar se o imóvel existe
+    const imovelExistente = await prisma.imovel.findUnique({
+      where: { id: imovelId }
+    })
+    
+    if (!imovelExistente) {
+      res.status(404).json({ erro: "Imóvel não encontrado" })
+      return
+    }
+    
+    // Verificar permissão
+    const adminId = req.userLogadoId || req.adminLogadoId
+    if (imovelExistente.adminId && imovelExistente.adminId !== adminId) {
+      res.status(403).json({ erro: "Sem permissão para remover este imóvel" })
+      return
+    }
+    
     const imovel = await prisma.imovel.update({
-      where: { id: Number(id) },
+      where: { id: imovelId },
       data: { disponivel: false }
     })
-    const adminId = req.userLogadoId as string
-    const adminNome = req.userLogadoNome as string
+    
+    const adminNome = req.userLogadoNome || req.adminLogadoNome
     const descricao = `Exclusão de: ${imovel.titulo}`
     const complemento = `Admin: ${adminNome}`
-    await prisma.log.create({ data: { descricao, complemento, adminId } })
+    
+    await prisma.log.create({ 
+      data: { 
+        descricao, 
+        complemento, 
+        adminId: adminId 
+      } 
+    })
+    
     res.status(200).json(imovel)
   } catch (error) {
-    res.status(400).json({ erro: error })
+    console.error('Erro ao remover imóvel:', error)
+    res.status(400).json({ 
+      erro: error instanceof Error ? error.message : String(error)
+    })
   }
 })
 

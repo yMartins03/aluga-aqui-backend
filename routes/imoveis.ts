@@ -8,11 +8,11 @@ const router = Router()
 
 const imovelSchema = z.object({
   titulo: z.string().min(3).max(100),
-  descricao: z.string().min(1).optional(), // Permite descrição de 1+ caracteres
-  endereco: z.string().min(3).max(255), // Reduzido para 3 caracteres mínimos
+  descricao: z.string().optional().nullable(), // Permite null e undefined
+  endereco: z.string().min(3).max(255),
   cidade: z.string().min(2).max(60),
-  bairro: z.string().min(1).optional(), // Permite bairro de 1+ caracteres
-  cep: z.string().min(1).optional(), // Permite CEP de 1+ caracteres
+  bairro: z.string().optional().nullable(), // Permite null e undefined
+  cep: z.string().optional().nullable(), // Permite null e undefined
   tipo: z.enum([
     'CASA', 
     'APARTAMENTO', 
@@ -27,9 +27,13 @@ const imovelSchema = z.object({
     'TERRENO', 
     'CHACARA'
   ]),
-  aluguelMensal: z.union([z.number().positive(), z.string().transform(val => parseFloat(val))]),
-  disponivel: z.boolean().optional(),
-  fotos: z.string().optional()
+  aluguelMensal: z.union([
+    z.number().positive(), 
+    z.string().transform(val => parseFloat(val)),
+    z.any().transform(val => typeof val === 'string' ? parseFloat(val) : Number(val))
+  ]),
+  disponivel: z.boolean().optional().default(true),
+  fotos: z.string().optional().nullable()
   // Removido proprietarioId e adminId - serão preenchidos automaticamente
 })
 
@@ -135,11 +139,33 @@ router.post("/", verificaToken, async (req: any, res) => {
   }
 })
 
+// Schema mais flexível para edição
+const imovelUpdateSchema = z.object({
+  titulo: z.string().min(3).max(100).optional(),
+  descricao: z.string().optional().nullable(),
+  endereco: z.string().min(3).max(255).optional(),
+  cidade: z.string().min(2).max(60).optional(),
+  bairro: z.string().optional().nullable(),
+  cep: z.string().optional().nullable(),
+  tipo: z.enum([
+    'CASA', 'APARTAMENTO', 'KITNET', 'STUDIO', 'COBERTURA', 
+    'SOBRADO', 'COMERCIAL', 'SALA_COMERCIAL', 'LOJA', 
+    'GALPAO', 'TERRENO', 'CHACARA'
+  ]).optional(),
+  aluguelMensal: z.any().transform(val => {
+    if (typeof val === 'string') return parseFloat(val);
+    if (typeof val === 'number') return val;
+    return parseFloat(String(val));
+  }).optional(),
+  disponivel: z.boolean().optional(),
+  fotos: z.string().optional().nullable()
+}).partial()
+
 router.put("/:id", verificaToken, async (req: any, res) => {
   const { id } = req.params
   
   console.log('PUT /imoveis/:id chamado com ID:', id)
-  console.log('Body recebido:', req.body)
+  console.log('Body recebido:', JSON.stringify(req.body, null, 2))
   
   // Validar se o ID é um número válido
   const imovelId = Number(id)
@@ -149,14 +175,18 @@ router.put("/:id", verificaToken, async (req: any, res) => {
     return
   }
   
-  const valida = imovelSchema.safeParse(req.body)
+  // Usar schema mais flexível para edição
+  const valida = imovelUpdateSchema.safeParse(req.body)
   if (!valida.success) {
-    console.log('Erro de validação:', valida.error)
-    res.status(400).json({ erro: valida.error })
+    console.log('Erro de validação:', JSON.stringify(valida.error.issues, null, 2))
+    res.status(400).json({ 
+      erro: "Dados inválidos para edição",
+      detalhes: valida.error.issues 
+    })
     return
   }
   
-  console.log('Dados validados:', valida.data)
+  console.log('Dados validados:', JSON.stringify(valida.data, null, 2))
   
   try {
     // Verificar se o imóvel existe
@@ -181,17 +211,25 @@ router.put("/:id", verificaToken, async (req: any, res) => {
     //   return
     // }
     
-    // Atualizar apenas os campos permitidos (não atualiza proprietário/admin)
-    const { aluguelMensal, ...outrosDados } = valida.data
+    // Preparar dados para atualização
+    const updateData: any = { ...valida.data }
+    
+    // Remover campos undefined para não causar erro
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] === undefined) {
+        delete updateData[key]
+      }
+    })
+    
+    console.log('Dados para atualização:', JSON.stringify(updateData, null, 2))
     
     const imovel = await prisma.imovel.update({
       where: { id: imovelId },
-      data: {
-        ...outrosDados,
-        aluguelMensal: typeof aluguelMensal === 'string' ? parseFloat(aluguelMensal) : aluguelMensal
-      },
+      data: updateData,
       include: { proprietario: true }
     })
+    
+    console.log('Imóvel atualizado com sucesso:', imovel.id)
     
     res.status(200).json(imovel)
   } catch (error) {
